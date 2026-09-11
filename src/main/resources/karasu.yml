@@ -1,0 +1,46 @@
+karasu:
+  transformation:
+    base-scale: 0.6
+    # Flight speed while morphed, as a fraction of vanilla flight speed (1.0 = vanilla, 0.4 = 40%).
+    morph-flight-speed: 0.4
+    # Cap for /crow spawn [count].
+    max-crow-count: 5
+    blind-duration-ticks: 30
+  # Crow swarm played when a player vanishes (teleporting away, entering spectator) and reappears
+  # (arriving, leaving spectator, un-morphing).
+  swarm:
+    departure-crows: 12
+    arrival-crows: 10
+    # ModelEngine scale of each swarm crow (1.0 = same size as the morph model).
+    crow-scale: 0.5
+    # How far (blocks) crows fly out on departure / start from on arrival.
+    spread: 8.0
+    departure-ticks: 30
+    arrival-ticks: 16
+    # How long the player-skinned mannequin stands at the departure spot before bursting into crows.
+    mannequin-ticks: 5
+    # Teleports shorter than this (same world) play no swarm.
+    min-teleport-distance: 4.0
+  visual:
+    use-model-engine: true
+    models:
+      flying: crow_fly
+      perched: crow_stand
+  sounds:
+    enter-sound: ENTITY_BAT_TAKEOFF
+    exit-sound: ENTITY_BAT_HURT
+    flying-sound: ENTITY_ENDER_DRAGON_FLAP
+    swarm-sound: ENTITY_WITCH_AMBIENT
+  resource-pack:
+    # Master switch. true: Karasu hands the ModelEngine pack to ResourcePackManager (if installed)
+    # so its crow model textures get merged into the server's combined pack. false: Karasu does
+    # nothing with packs - skip it and manage the pack yourself (e.g. ModelEngine or RSPM). The
+    # referenced pack file is always left in place either way.
+    use-resourcepack: false
+    # Pack file this plugin manages, relative to the server root. ModelEngine writes its generated
+    # pack here after /meg reload.
+    pack-file: 'plugins/ModelEngine/resource pack.zip'
+    # Direct-send URL, used ONLY when ResourcePackManager is NOT installed. Host the pack file
+    # somewhere and point this at it; the SHA-1 is computed automatically. Leave blank to send
+    # nothing directly.
+    url: ''

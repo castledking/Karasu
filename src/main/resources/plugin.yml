@@ -1,0 +1,33 @@
+name: Karasu
+version: 1.0.0
+main: codes.castled.karasu.KarasuPlugin
+api-version: 1.21
+description: Crow transformation plugin with ModelEngine support
+author: castled
+softdepend: [ModelEngine, UnlimitedNameTags]
+
+commands:
+  crows:
+    description: Crow transformation toggle and info
+    usage: /crows <morph|info|debug>
+    permission: karasu.crows
+  crow:
+    description: Crow spawning
+    usage: /crow spawn [count]
+    permission: karasu.crow
+
+permissions:
+  karasu.crows:
+    description: Allows use of /crows to morph into a crow
+    default: op
+  karasu.exempt:
+    description: Players with this are not affected by the teleport/spectator crow effect
+    default: false
+  karasu.crow:
+    description: Allows use of /crow spawn
+    default: op
+    children:
+      karasu.crow.spawn: true
+  karasu.crow.spawn:
+    description: Allows use of /crow spawn [count]
+    default: op

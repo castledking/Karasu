@@ -1,0 +1,27 @@
+# Maven build output
+target/
+dependency-reduced-pom.xml
+
+# Premium ModelEngine jar (paid, not redistributable) - drop your own copy into libs/ to build.
+# The GPLv3 UnlimitedNameTags API jars in libs/ are tracked.
+libs/ModelEngine-*.jar
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.factorypath
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Logs and interrupted atomic writes
+*.log
+*.tmp
+*.tmp.*
