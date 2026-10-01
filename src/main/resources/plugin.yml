@@ -1,7 +1,10 @@
 name: Karasu
 version: 1.0.0
 main: codes.castled.karasu.KarasuPlugin
-api-version: '26.3'
+# Minimum supported server version, not the version this was built against. Paper rejects a plugin
+# declaring an api-version newer than the server, so 26.3 here would make the jar unloadable on any
+# older server. Every API this plugin uses exists as far back as 1.21.9.
+api-version: '1.21'
 description: Crow transformation plugin with BetterModel and ModelEngine support
 author: castled
 # BetterModel is listed first because it is the engine that supports 26.3; ModelEngine is kept as a
