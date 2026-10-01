@@ -19,12 +19,27 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+            26.3 has no -stable build yet, only alphas and betas. Bump this and
+            karasu.visual.model-engine's default in src/main/resources/karasu.yml together.
+        -->
+        <paper.version>26.3.build.140-beta</paper.version>
+        <!--
+            Compile-time surface only; BetterModel is `provided`. 3.5.1 is the build that
+            targets 26.3 but is not on Maven Central yet, and its api/ module is byte
+            identical to 3.5.0, so we compile against the published 3.5.0.
+        -->
+        <bettermodel.version>3.5.0</bettermodel.version>
     </properties>
 
     <repositories>
         <repository>
             <id>papermc</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+        <repository>
+            <id>codemc-releases</id>
+            <url>https://repo.codemc.io/repository/maven-releases/</url>
         </repository>
         <repository>
             <id>opencollab-snapshot</id>
@@ -40,15 +55,25 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>26.2.build.87-stable</version>
+            <version>${paper.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.ticxo</groupId>
-            <artifactId>modelengine</artifactId>
-            <version>4.1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/ModelEngine-4.1.0.jar</systemPath>
+            <groupId>com.github.retrooper</groupId>
+            <artifactId>packetevents-spigot</artifactId>
+            <version>2.12.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <!--
+            BetterModel is optional at runtime and reached through softdepend, so this is
+            `provided`. ModelEngine needs no dependency at all: ModelEngineBridge binds to
+            it reflectively, which is why its premium jar is not required to build Karasu.
+        -->
+        <dependency>
+            <groupId>io.github.toxicity188</groupId>
+            <artifactId>bettermodel-bukkit-api</artifactId>
+            <version>${bettermodel.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.alexdev</groupId>

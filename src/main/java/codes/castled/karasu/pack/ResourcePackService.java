@@ -12,14 +12,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Owns how the ModelEngine resource pack reaches players so the crow models have their textures.
+ * Owns how the model engine's resource pack reaches players so the crow models have their textures.
  *
  * <p>Behaviour is gated by {@code karasu.resource-pack.use-resourcepack} (default false), mirroring
  * Chess's resource-pack delivery:
  *
  * <ul>
  *   <li><b>false</b> - the plugin does nothing: it neither registers nor sends the pack, letting
- *       you manage it yourself (ModelEngine or ResourcePackManager).
+ *       you manage it yourself (BetterModel, ModelEngine or ResourcePackManager).
  *   <li><b>true + ResourcePackManager installed</b> - the pack at {@code pack-file} is registered
  *       with RSPM, which merges it into the server's combined pack (essential alongside
  *       Nexo/ItemsAdder, where a direct send would fight their pack).
@@ -62,7 +62,7 @@ public final class ResourcePackService {
           .getLogger()
           .info(
               "karasu.resource-pack.use-resourcepack is false; not sending or merging a pack. "
-                  + "Manage it yourself (ModelEngine writes it to plugins/ModelEngine/resource pack.zip).");
+                  + "Manage it yourself; the active engine writes its pack to " + packFile + ".");
       return;
     }
 
@@ -77,14 +77,13 @@ public final class ResourcePackService {
           .getLogger()
           .warning(
               "No ResourcePackManager installed and karasu.resource-pack.url is blank, so players "
-                  + "will not receive the ModelEngine pack. Host plugins/ModelEngine/resource "
-                  + "pack.zip somewhere and set karasu.resource-pack.url, or install "
-                  + "ResourcePackManager.");
+                  + "will not receive the model engine pack. Host " + packFile
+                  + " somewhere and set karasu.resource-pack.url, or install ResourcePackManager.");
       return;
     }
     packSha1 = sha1Of(packFile);
     if (packSha1 != null) {
-      plugin.getLogger().info("Sending the ModelEngine pack directly from " + packUrl + " on join.");
+      plugin.getLogger().info("Sending the " + packFile + " pack directly from " + packUrl + " on join.");
     }
   }
 

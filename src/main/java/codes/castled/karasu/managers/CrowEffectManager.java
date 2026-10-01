@@ -2,6 +2,7 @@ package codes.castled.karasu.managers;
 
 import codes.castled.karasu.KarasuPlugin;
 import codes.castled.karasu.effects.CrowSwarm;
+import codes.castled.karasu.hooks.SelfItemHider;
 import codes.castled.karasu.hooks.UnlimitedNametagsHook;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -12,10 +13,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class CrowEffectManager {
     private static final float VANILLA_FLY_SPEED = 0.1f;
+    private static final float VANILLA_WALK_SPEED = 0.2f;
+    // Long enough for the entity to pick up a SCALE change before BetterModel reads its dimensions.
+    private static final long MODEL_ATTACH_DELAY_TICKS = 2L;
     private final KarasuPlugin plugin;
     private final CrowConfig config;
-    private final ModelEngineBridge modelEngine;
+    private CrowModelEngine engine;
     private final UnlimitedNametagsHook nametags;
+    private final SelfItemHider selfItemHider;
     private final CrowSwarm swarm;
     private final ConcurrentHashMap<UUID, CrowState> playerStates = new ConcurrentHashMap<>();
     private final BukkitTask modelSyncTask;
@@ -23,9 +28,10 @@ public class CrowEffectManager {
     public CrowEffectManager(KarasuPlugin plugin) {
         this.plugin = plugin;
         this.config = CrowConfig.getInstance();
-        this.modelEngine = plugin.getModelEngineBridge();
+        this.engine = plugin.getCrowModelEngine();
         this.nametags = plugin.getNametagHook();
-        this.swarm = new CrowSwarm(plugin, config, modelEngine);
+        this.selfItemHider = plugin.getSelfItemHider();
+        this.swarm = new CrowSwarm(plugin, config, engine);
         this.modelSyncTask = Bukkit.getScheduler().runTaskTimer(plugin, this::syncModels, 2, 2);
     }
     
@@ -59,6 +65,12 @@ public class CrowEffectManager {
             Player player = Bukkit.getPlayer(playerId);
             if (player == null) return;
 
+            // The sneak listener only sees new toggles, so this also catches a player who was already
+            // crouching when they morphed.
+            if (config.isSneakShiftDisabled() && player.isSneaking()) {
+                player.setSneaking(false);
+            }
+
             boolean flying;
             if (!state.flyingMode && player.isFlying()) {
                 flying = true;
@@ -69,7 +81,7 @@ public class CrowEffectManager {
             }
 
             state.flyingMode = flying;
-            modelEngine.removeModel(player, flying ? config.getPerchedModelId() : config.getFlyingModelId());
+            engine.removeModel(player, flying ? config.getPerchedModelId() : config.getFlyingModelId());
             applyModelToPlayer(player, state);
         });
     }
@@ -111,7 +123,7 @@ public class CrowEffectManager {
         swarm.converge(player, config.getArrivalCrowCount(), crow ? 0.1 : 0.2, crow ? 0.6 : 1.7);
     }
 
-    private boolean isTransformed(Player player) {
+    public boolean isTransformed(Player player) {
         return playerStates.containsKey(player.getUniqueId());
     }
     
@@ -134,16 +146,23 @@ public class CrowEffectManager {
         player.addScoreboardTag("karasu_transformed");
         
         setPlayerScale(player, config.getBaseScale());
-        
-        player.setWalkSpeed(0);
+
+        state.originalWalkSpeed = player.getWalkSpeed();
+        player.setWalkSpeed(config.getWalkSpeed());
         // No jumping while perched; double-tap space still toggles flight for players allowed to fly.
         setJumpStrength(player, 0);
         state.originalFlySpeed = player.getFlySpeed();
         player.setFlySpeed((float) Math.max(0, Math.min(1, VANILLA_FLY_SPEED * config.getMorphFlightSpeed())));
 
         state.flyingMode = player.isFlying();
-        applyModelToPlayer(player, state);
+        attachModelWhenScaleSettles(player, state);
         if (nametags != null) nametags.hide(player);
+        if (selfItemHider != null) selfItemHider.hide(player);
+        // The model engine hides the body through its own entity data, but that does not appear to
+        // reach the player viewing themselves. Bukkit's invisible flag is a separate path.
+        if (config.isSelfBodyHidden()) {
+            player.setInvisible(true);
+        }
         
         startBlindness(player, config.getBlindDurationTicks() + 10);
     }
@@ -172,13 +191,60 @@ public class CrowEffectManager {
         }
     }
     
+    /**
+     * Attaches the model a tick or two after the scale change rather than in the same tick.
+     *
+     * <p>BetterModel builds a tracker's bone anchors from the entity's dimensions, and those only
+     * reflect a SCALE change once the entity has ticked. Attaching immediately anchors the model about a
+     * block below where it belongs, and the only reason it looked right on later swaps was that
+     * {@link #syncModels} re-attaches several ticks after take-off and landing.
+     */
+    private void attachModelWhenScaleSettles(Player player, CrowState state) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            // The player may have un-morphed, or morphed again, while this was queued.
+            if (playerStates.get(player.getUniqueId()) != state) {
+                return;
+            }
+            applyModelToPlayer(player, state);
+        }, MODEL_ATTACH_DELAY_TICKS);
+    }
+
     private void applyModelToPlayer(Player player, CrowState state) {
-        if (!config.isUseModelEngine() || !modelEngine.isEnabled()) {
+        if (!config.isModelsEnabled() || !engine.isAvailable()) {
             return;
         }
         String modelId = state.flyingMode ? config.getFlyingModelId() : config.getPerchedModelId();
-        modelEngine.setBaseEntityVisible(player, false);
-        modelEngine.applyModel(player, modelId);
+        engine.setBaseEntityVisible(player, false);
+        // Self view rides along with the attach: each engine has to apply it at a different point
+        // relative to the model existing, so it is the engine's business, not the caller's.
+        engine.applyModel(player, modelId, config.isSelfView());
+    }
+
+    /**
+     * Takes the crow model off every transformed player without touching their attributes, so a reload
+     * can re-attach under a newly resolved engine instead of leaving the old engine's model behind.
+     */
+    public void detachModels() {
+        playerStates.forEach((playerId, state) -> {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null) return;
+            engine.removeModel(player, config.getFlyingModelId());
+            engine.removeModel(player, config.getPerchedModelId());
+        });
+    }
+
+    /** Re-attaches the crow model for everyone currently transformed, e.g. after {@code /karasu reload}. */
+    public void refreshModels() {
+        playerStates.forEach((playerId, state) -> {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) applyModelToPlayer(player, state);
+        });
+    }
+
+    /** Re-points this manager and its swarm at a different engine, after a config reload. */
+    public void setEngine(CrowModelEngine engine) {
+        this.engine = engine;
+        this.swarm.setEngine(engine);
     }
     
     private void removeTransformation(Player player, CrowState state) {
@@ -192,14 +258,18 @@ public class CrowEffectManager {
     private void restorePlayer(Player player, CrowState state) {
         player.removeScoreboardTag("karasu_transformed");
 
-        modelEngine.removeModel(player, config.getFlyingModelId());
-        modelEngine.removeModel(player, config.getPerchedModelId());
-        modelEngine.setBaseEntityVisible(player, true);
+        engine.removeModel(player, config.getFlyingModelId());
+        engine.removeModel(player, config.getPerchedModelId());
+        engine.setSelfView(player, false);
+        engine.setBaseEntityVisible(player, true);
         if (nametags != null) nametags.show(player);
+        if (selfItemHider != null) selfItemHider.show(player);
+        player.setInvisible(false);
 
         setPlayerScale(player, 1.0);
         resetJumpStrength(player);
-        player.setWalkSpeed(0.2f);
+        // Restore whatever the player had, not a hardcoded 0.2, so /speed or another plugin survives.
+        player.setWalkSpeed(state != null ? state.originalWalkSpeed : VANILLA_WALK_SPEED);
         if (state != null) {
             player.setFlySpeed(state.originalFlySpeed);
         }
@@ -241,6 +311,11 @@ public class CrowEffectManager {
     public void cleanup() {
         modelSyncTask.cancel();
         swarm.cleanup();
+        restoreAll();
+    }
+
+    /** Un-morphs everyone, leaving the model sync task running. */
+    public void restoreAll() {
         playerStates.forEach((playerId, state) -> {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) restorePlayer(player, state);
@@ -259,5 +334,6 @@ public class CrowEffectManager {
         boolean flyingMode = false;
         boolean blindnessActive = false;
         float originalFlySpeed = VANILLA_FLY_SPEED;
+        float originalWalkSpeed = VANILLA_WALK_SPEED;
     }
 }

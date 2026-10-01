@@ -6,12 +6,15 @@ karasu:
     # Cap for /crow spawn [count].
     max-crow-count: 5
     blind-duration-ticks: 30
-  # Crow swarm played when a player vanishes (teleporting away, entering spectator) and reappears
-  # (arriving, leaving spectator, un-morphing).
+    # Walking speed while morphed. 0.2 is vanilla. 0 roots you in place, which is what
+    # earlier versions hardcoded - use it if you want the perched crow planted.
+    walk-speed: 0.2
   swarm:
+    # Crow swarm played when a player vanishes (teleporting away, entering spectator) and reappears
+    # (arriving, leaving spectator, un-morphing).
     departure-crows: 12
     arrival-crows: 10
-    # ModelEngine scale of each swarm crow (1.0 = same size as the morph model).
+    # Scale of each swarm crow (1.0 = same size as the morph model).
     crow-scale: 0.5
     # How far (blocks) crows fly out on departure / start from on arrival.
     spread: 8.0
@@ -22,24 +25,79 @@ karasu:
     # Teleports shorter than this (same world) play no swarm.
     min-teleport-distance: 4.0
   visual:
-    use-model-engine: true
+    # Which plugin draws the crow: auto | bettermodel | modelengine | none.
+    #   auto       - prefer BetterModel, fall back to ModelEngine (default)
+    #   bettermodel- BetterModel only, never falls back
+    #   modelengine- ModelEngine only
+    #   none       - no models; players still transform, the crow is just invisible
+    # 'auto' is the right choice on 26.3+: BetterModel targets it, ModelEngine does not yet, so on
+    # 26.3 'auto' picks BetterModel and on 26.2 it falls back to ModelEngine. Pinning 'modelengine'
+    # on 26.3 gets you no models, with a warning at startup.
+    model-engine: auto
+    # Let morphed players see their own crow model (F5). Their own body is hidden so only the crow shows.
+    self-view: true
+    # With self-view, hide your own held items / armor so they don't float around the crow in F5.
+    # Needs packetevents. Those slots look empty in your own hotbar/inventory while morphed; the
+    # items themselves are untouched. Changing these needs a restart.
+    hide-held-item-from-self: true
+    hide-armor-from-self: true
+    # Also hide the morphed player's own body through Bukkit, not just through the model
+    # engine. BetterModel writes the invisible flag itself, but its packets do not seem
+    # to reach the player viewing themselves, which is why the wearer still sees their own
+    # body in third person. This sets Bukkit's invisible flag as well, which travels a
+    # different path. Hides the body from everyone, which is what a disguise wants.
+    hide-self-body: false
+    # Size of the crow model itself, independent of transformation.base-scale. BetterModel
+    # would otherwise size the model from the player's SCALE attribute, which couples the two:
+    # shrinking the player to sit inside the crow also moves the model's anchor and sinks it
+    # into the ground. 1.0 renders the model at its authored size; raise it to make the crow
+    # taller than the player's hitbox, lower it to shrink the model.
+    model-scale: 1.0
+    # Stop a morphed player from sneaking, which would otherwise make the client crouch the
+    # entity and drag the model down with it. false lets them sneak and the model follows.
+    # Canceling the sneak can make the player twitch briefly, since the client crouches
+    # before the server refuses it. Set false if that is bothersome.
+    disable-sneak-shift: true
     models:
+      # ModelEngine blueprint names. Only read when the engine in use is ModelEngine.
       flying: crow_fly
       perched: crow_stand
+    bettermodel:
+      models:
+        # BetterModel model names. Only read when the engine in use is BetterModel. These are model
+        # ids in BetterModel's own model folder, not the same namespace ModelEngine blueprints live
+        # in, so they can differ from the pair above.
+        flying: crow_fly
+        perched: crow_stand
+      # Draw the morph as a BetterModel limb model instead of a general model. Limb models
+      # live in plugins/BetterModel/players/ and go through BetterModel's player code path,
+      # which is the only one built to render on a player - and the only remaining candidate
+      # for making the wearer see their own crow in third person. Put the crow models in that
+      # folder and set their names under bettermodel.models. Affects the morph only; the swarm
+      # crows are armor stands and keep using the general models.
+      use-limb-models: false
+      # Bone names to hide while rendering. 'hitbox' is hidden by default because models
+      # converted from ModelEngine often bake the hitbox in as visible, fully textured
+      # geometry, which shows up as a box around the crow. Hiding the display keeps the
+      # bone's hit detection intact. BetterModel only.
+      hidden-bones:
+      - hitbox
   sounds:
     enter-sound: ENTITY_BAT_TAKEOFF
     exit-sound: ENTITY_BAT_HURT
     flying-sound: ENTITY_ENDER_DRAGON_FLAP
     swarm-sound: ENTITY_WITCH_AMBIENT
   resource-pack:
-    # Master switch. true: Karasu hands the ModelEngine pack to ResourcePackManager (if installed)
-    # so its crow model textures get merged into the server's combined pack. false: Karasu does
-    # nothing with packs - skip it and manage the pack yourself (e.g. ModelEngine or RSPM). The
-    # referenced pack file is always left in place either way.
+    # Master switch. true: Karasu hands the model engine's pack to ResourcePackManager (if
+    # installed) so its crow model textures get merged into the server's combined pack. false:
+    # Karasu does nothing with packs - skip it and manage the pack yourself (e.g. BetterModel
+    # or RSPM). The referenced pack file is always left in place either way.
     use-resourcepack: false
-    # Pack file this plugin manages, relative to the server root. ModelEngine writes its generated
-    # pack here after /meg reload.
-    pack-file: 'plugins/ModelEngine/resource pack.zip'
+    # Pack file this plugin manages, relative to the server root. Leave blank to use whichever pack
+    # the active engine builds: plugins/BetterModel/build.zip under BetterModel,
+    # plugins/ModelEngine/resource pack.zip under ModelEngine. Both engines write their pack on their
+    # own reload (/bettermodel reload or /meg reload), so the file may not exist on first boot.
+    pack-file: ''
     # Direct-send URL, used ONLY when ResourcePackManager is NOT installed. Host the pack file
     # somewhere and point this at it; the SHA-1 is computed automatically. Leave blank to send
     # nothing directly.

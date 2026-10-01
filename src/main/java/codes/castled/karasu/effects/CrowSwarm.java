@@ -2,7 +2,7 @@ package codes.castled.karasu.effects;
 
 import codes.castled.karasu.KarasuPlugin;
 import codes.castled.karasu.managers.CrowConfig;
-import codes.castled.karasu.managers.ModelEngineBridge;
+import codes.castled.karasu.managers.CrowModelEngine;
 import com.destroystokyo.paper.ClientOption;
 import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import java.util.ArrayList;
@@ -25,8 +25,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 /**
- * Crow swarm effects: crows are invisible marker armor stands carrying the crow_fly ModelEngine model,
- * moved along quadratic bezier curves one step per tick.
+ * Crow swarm effects: crows are invisible marker armor stands carrying the flying crow model on
+ * whichever {@link CrowModelEngine} is active, moved along quadratic bezier curves one step per tick.
  */
 public class CrowSwarm {
     private static final String TAG = "karasu_swarm";
@@ -37,13 +37,13 @@ public class CrowSwarm {
 
     private final KarasuPlugin plugin;
     private final CrowConfig config;
-    private final ModelEngineBridge modelEngine;
+    private CrowModelEngine engine;
     private final Set<Entity> spawned = ConcurrentHashMap.newKeySet();
 
-    public CrowSwarm(KarasuPlugin plugin, CrowConfig config, ModelEngineBridge modelEngine) {
+    public CrowSwarm(KarasuPlugin plugin, CrowConfig config, CrowModelEngine engine) {
         this.plugin = plugin;
         this.config = config;
-        this.modelEngine = modelEngine;
+        this.engine = engine;
     }
 
     /**
@@ -146,7 +146,7 @@ public class CrowSwarm {
 
     private ArmorStand spawnCrow(Location location) {
         World world = location.getWorld();
-        if (!modelEngine.isEnabled() || !world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
+        if (!engine.isAvailable() || !world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
             return null;
         }
         ArmorStand stand = world.spawn(location, ArmorStand.class, as -> {
@@ -160,11 +160,11 @@ public class CrowSwarm {
         });
         if (!stand.isValid()) return null;
         spawned.add(stand);
-        if (!modelEngine.applyModel(stand, config.getFlyingModelId(), config.getSwarmCrowScale())) {
+        if (!engine.applyModel(stand, config.getFlyingModelId(), config.getSwarmCrowScale())) {
             remove(stand);
             return null;
         }
-        modelEngine.setBaseEntityVisible(stand, false);
+        engine.setBaseEntityVisible(stand, false);
         return stand;
     }
 
@@ -195,11 +195,16 @@ public class CrowSwarm {
         return mannequin;
     }
 
+    /** Re-points the swarm at a different engine, after a config reload. */
+    public void setEngine(CrowModelEngine engine) {
+        this.engine = engine;
+    }
+
     private void remove(Entity entity) {
         if (entity == null) return;
         spawned.remove(entity);
         if (entity instanceof ArmorStand) {
-            modelEngine.removeModel(entity, config.getFlyingModelId());
+            engine.removeModel(entity, config.getFlyingModelId());
         }
         entity.remove();
     }

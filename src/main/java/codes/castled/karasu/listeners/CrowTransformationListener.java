@@ -11,6 +11,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import java.util.EnumSet;
@@ -66,6 +67,27 @@ public class CrowTransformationListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
         crowEffectManager.onPlayerQuit(event.getPlayer());
+    }
+
+    /**
+     * Refuses a sneak while transformed, so the client does not crouch the entity and drag the crow down
+     * with it. Refused here rather than corrected with an offset: the client plays its own crouch
+     * animation before the server's refusal reaches it, so there is a frame of twitch either way.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
+        if (!event.isSneaking()) {
+            return;
+        }
+        CrowConfig config = CrowConfig.getInstance();
+        if (!config.isSneakShiftDisabled()) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (!crowEffectManager.isTransformed(player)) {
+            return;
+        }
+        event.setCancelled(true);
     }
 
     private boolean canApplyTransformation(Player player) {

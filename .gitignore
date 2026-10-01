@@ -2,9 +2,11 @@
 target/
 dependency-reduced-pom.xml
 
-# Premium ModelEngine jar (paid, not redistributable) - drop your own copy into libs/ to build.
-# The GPLv3 UnlimitedNameTags API jars in libs/ are tracked.
+# No longer needed: ModelEngine is bound reflectively, so its premium jar is not a build input.
+# Kept ignored so a local copy lying around is not committed by accident.
 libs/ModelEngine-*.jar
+
+# The GPLv3 UnlimitedNameTags API jars in libs/ are tracked and still required to build.
 
 # IDEs
 .vscode/
