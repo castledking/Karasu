@@ -3,8 +3,7 @@ package codes.castled.karasu.effects;
 import codes.castled.karasu.KarasuPlugin;
 import codes.castled.karasu.managers.CrowConfig;
 import codes.castled.karasu.managers.CrowModelEngine;
-import com.destroystokyo.paper.ClientOption;
-import io.papermc.paper.datacomponent.item.ResolvableProfile;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -55,6 +54,12 @@ public class CrowSwarm {
         int count = config.getDepartureCrowCount();
         if (!withMannequin) {
             burst(origin, count, 0.1, 0.6);
+            return;
+        }
+        // Mannequin arrived in 1.21.9. Below that there is no stand-in to leave behind, so the crows
+        // burst immediately instead. The only loss is the brief pause; the burst itself is unchanged.
+        if (!supportsMannequin()) {
+            burst(origin, count, 0.2, 1.7);
             return;
         }
         Mannequin mannequin = spawnMannequin(player, origin);
@@ -170,8 +175,10 @@ public class CrowSwarm {
 
     private Mannequin spawnMannequin(Player player, Location location) {
         Mannequin mannequin = location.getWorld().spawn(location, Mannequin.class, m -> {
-            m.setProfile(ResolvableProfile.resolvableProfile(player.getPlayerProfile()));
-            m.setSkinParts(player.getClientOption(ClientOption.SKIN_PARTS));
+            // Reached reflectively so the plugin still loads on Spigot, which has neither
+            // Mannequin#setProfile(PlayerProfile) nor the client's SKIN_PARTS preference. On Spigot
+            // the mannequin keeps its default skin; everything else about the effect is unchanged.
+            applyPlayerSkin(m, player);
             m.setMainHand(player.getMainHand());
             m.setDescription(null);
             m.setCustomNameVisible(false);
@@ -198,6 +205,99 @@ public class CrowSwarm {
     /** Re-points the swarm at a different engine, after a config reload. */
     public void setEngine(CrowModelEngine engine) {
         this.engine = engine;
+    }
+
+    /**
+     * Mirrors the player's skin onto the departure mannequin.
+     *
+     * <p>Both the profile and the skin-layer preference are Paper-only, so both are called
+     * reflectively and resolved from the methods themselves rather than from imported types. That keeps
+     * the plugin loadable on Spigot, where neither exists, at the cost of the mannequin keeping its
+     * default skin there. The mannequin itself is a 1.21.9+ entity, so on older servers the departure
+     * effect degrades to bursting the crows immediately - see {@link #supportsMannequin()}.
+     */
+    private void applyPlayerSkin(Mannequin mannequin, Player player) {
+        applyMannequinProfile(mannequin, player);
+        applySkinParts(mannequin, player);
+    }
+
+    /**
+     * Paper returns its own {@code com.destroystokyo.paper.profile.PlayerProfile} from
+     * {@code getPlayerProfile()}, while the conversion helper takes a {@code ResolvableProfile}. Neither
+     * type is referenced at compile time, so both the profile and the matching static factory method are
+     * resolved from the objects at runtime - looking the factory up by a hardcoded parameter type
+     * silently fails, because the Bukkit and Paper profile classes are unrelated.
+     */
+    private void applyMannequinProfile(Mannequin mannequin, Player player) {
+        Method setter = findSingleArgMethod(mannequin, "setProfile");
+        if (setter == null) return;
+        try {
+            Object profile = player.getClass().getMethod("getPlayerProfile").invoke(player);
+            if (profile == null) return;
+            Method factory = findStaticFactoryTaking(profile, "resolvableProfile");
+            if (factory == null) return;
+            setter.invoke(mannequin, factory.invoke(null, profile));
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // No Paper profile support here; the mannequin keeps its default skin.
+        }
+    }
+
+    /** Finds a static single-argument method on the profile's own class that accepts that profile. */
+    private static Method findStaticFactoryTaking(Object profile, String name) {
+        for (Method method : profile.getClass().getMethods()) {
+            if (method.getName().equals(name)
+                    && method.getParameterCount() == 1
+                    && java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                    && method.getParameterTypes()[0].isInstance(profile)) {
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private void applySkinParts(Mannequin mannequin, Player player) {
+        Method setter = findSingleArgMethod(mannequin, "setSkinParts");
+        Method reader = findSingleArgMethod(player, "getClientOption");
+        if (setter == null || reader == null) return;
+        try {
+            Class<?> optionType = reader.getParameterTypes()[0];
+            Object skinPartsOption = optionType.getField("SKIN_PARTS").get(null);
+            Object value = reader.invoke(player, skinPartsOption);
+            setter.invoke(mannequin, value);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // No client skin-layer preference here; the mannequin keeps its default layers.
+        }
+    }
+
+    private static Method findSingleArgMethod(Object target, String name) {
+        try {
+            for (Method method : target.getClass().getMethods()) {
+                if (method.getName().equals(name) && method.getParameterCount() == 1) {
+                    return method;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Fall through: treated as unsupported.
+        }
+        return null;
+    }
+
+    /**
+     * Whether this server has the {@link Mannequin} entity. It arrived in 1.21.9, so on older servers
+     * the departure effect skips the brief stand-in and bursts the crows straight away.
+     */
+    private static boolean supportsMannequin() {
+        return MANNEQUIN != null;
+    }
+
+    private static final Class<?> MANNEQUIN = resolveMannequin();
+
+    private static Class<?> resolveMannequin() {
+        try {
+            return Class.forName("org.bukkit.entity.Mannequin");
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
     }
 
     private void remove(Entity entity) {
