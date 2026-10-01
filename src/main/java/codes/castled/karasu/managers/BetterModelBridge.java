@@ -1,6 +1,8 @@
 package codes.castled.karasu.managers;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import kr.toxicity.model.api.BetterModel;
 import kr.toxicity.model.api.bukkit.platform.BukkitAdapter;
 import kr.toxicity.model.api.data.renderer.ModelRenderer;
@@ -9,6 +11,7 @@ import kr.toxicity.model.api.platform.PlatformPlayer;
 import kr.toxicity.model.api.tracker.EntityHideOption;
 import kr.toxicity.model.api.tracker.EntityTracker;
 import kr.toxicity.model.api.tracker.EntityTrackerRegistry;
+import kr.toxicity.model.api.tracker.ModelRotation;
 import kr.toxicity.model.api.tracker.ModelScaler;
 import kr.toxicity.model.api.tracker.TrackerModifier;
 import kr.toxicity.model.api.tracker.TrackerUpdateAction;
@@ -43,6 +46,7 @@ public class BetterModelBridge implements CrowModelEngine {
     private final List<String> hiddenBones;
     private final double modelScale;
     private final boolean limbModels;
+    private final ConcurrentMap<java.util.UUID, ContinuousYaw> yaws = new ConcurrentHashMap<>();
     private boolean available;
 
     public BetterModelBridge(JavaPlugin plugin, CrowConfig config) {
@@ -140,6 +144,7 @@ public class BetterModelBridge implements CrowModelEngine {
         EntityTracker tracker = renderer.getOrCreate(target, TrackerModifier.DEFAULT, t -> {
             t.scaler(ModelScaler.value((float) scale));
             t.hideOption(HIDE_BASE_BODY);
+            if (entity instanceof Player player) takeRotationOffTheEngine(t, player);
         });
         // Applied unconditionally rather than in getOrCreate's creation callback: that callback only
         // runs when the tracker is created, so a tracker that outlived a config change would keep its
@@ -195,6 +200,47 @@ public class BetterModelBridge implements CrowModelEngine {
     }
 
     /**
+     * Drives a player model's rotation from the player instead of leaving it to the engine.
+     *
+     * <p>By default a tracker's rotation source is its body rotator, which for a player returns the
+     * entity's body yaw - a value wrapped into [-180, 180). Rotating the camera through the wrap
+     * therefore makes the source jump a full turn, and the model spins the long way round before
+     * settling. Locking the body rotator removes that source, and feeding an unwrapped yaw means
+     * successive values stay close together, so interpolation always takes the short path. This
+     * mirrors what BetterModel's own RollTester does for a player model.
+     */
+    private void takeRotationOffTheEngine(EntityTracker tracker, Player player) {
+        tracker.bodyRotator().lockRotation(true);
+        ContinuousYaw continuous = yaws.computeIfAbsent(player.getUniqueId(), id -> new ContinuousYaw());
+        tracker.rotation(() -> new ModelRotation(0F, continuous.update(player.getYaw())));
+    }
+
+    /**
+     * Yaw that keeps counting in one direction instead of wrapping, so the engine never sees a 360
+     * degree step between frames.
+     */
+    private static final class ContinuousYaw {
+        private float previous;
+        private boolean primed;
+
+        float update(float yaw) {
+            if (!primed) {
+                primed = true;
+                previous = yaw;
+                return yaw;
+            }
+            float delta = yaw - previous;
+            if (delta > 180F) {
+                delta -= 360F;
+            } else if (delta < -180F) {
+                delta += 360F;
+            }
+            previous += delta;
+            return previous;
+        }
+    }
+
+    /**
      * Hides the bones the operator listed, which is how a model that bakes its hitbox in as visible
      * geometry gets cleaned up. Only the display is hidden, so the bone keeps working for hit detection.
      */
@@ -213,6 +259,7 @@ public class BetterModelBridge implements CrowModelEngine {
     @Override
     public boolean removeModel(Entity entity, String modelId) {
         if (!available || entity == null || modelId == null) return false;
+        yaws.remove(entity.getUniqueId());
         EntityTrackerRegistry registry = EntityTrackerRegistry.registry(entity.getUniqueId());
         return registry != null && registry.remove(modelId);
     }
