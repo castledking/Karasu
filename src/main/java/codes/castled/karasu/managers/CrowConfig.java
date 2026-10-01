@@ -179,9 +179,17 @@ public class CrowConfig {
         return bool("karasu.visual.hide-armor-from-self");
     }
 
-    /** Whether the active engine tracks models under the BetterModel names or the ModelEngine ones. */
+    /**
+     * Whether the active engine tracks models under the BetterModel names or the ModelEngine ones.
+     * Bat mode has no models at all, so it falls through to the ModelEngine names harmlessly.
+     */
     private boolean usesBetterModelNames() {
         return modelEngineType == ModelEngineType.BETTERMODEL;
+    }
+
+    /** True when the active engine draws a vanilla mob rather than a model. */
+    public boolean isVanillaEngine() {
+        return modelEngineType == ModelEngineType.VANILLA;
     }
 
     /** Model id for the airborne crow, resolved for the active engine. */

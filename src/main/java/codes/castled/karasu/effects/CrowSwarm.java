@@ -135,6 +135,9 @@ public class CrowSwarm {
                         }
                     } else {
                         flight.stand.teleport(location);
+                        // Bat mode renders with a separate entity, so it has to be moved alongside the
+                        // carrier or the bats stay behind on the flight path.
+                        engine.tickModel(flight.stand);
                     }
                     if (local >= flight.duration) {
                         remove(flight.stand);

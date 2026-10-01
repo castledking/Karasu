@@ -11,6 +11,8 @@ public enum ModelEngineType {
     BETTERMODEL,
     /** ModelEngine only. */
     MODELENGINE,
+    /** Draw the crows as bats, using LibsDisguises if present. No resource pack needed. */
+    VANILLA,
     /** Draw no models at all. Transforms still work, the crow is just invisible. */
     NONE;
 

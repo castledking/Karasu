@@ -25,14 +25,18 @@ karasu:
     # Teleports shorter than this (same world) play no swarm.
     min-teleport-distance: 4.0
   visual:
-    # Which plugin draws the crow: auto | bettermodel | modelengine | none.
+    # Which plugin draws the crow: auto | bettermodel | modelengine | vanilla | none.
     #   auto       - prefer BetterModel, fall back to ModelEngine (default)
     #   bettermodel- BetterModel only, never falls back
     #   modelengine- ModelEngine only
+    #   vanilla    - no model plugin at all; the crow is a bat, disguised with LibsDisguises
     #   none       - no models; players still transform, the crow is just invisible
     # 'auto' is the right choice on 26.3+: BetterModel targets it, ModelEngine does not yet, so on
     # 26.3 'auto' picks BetterModel and on 26.2 it falls back to ModelEngine. Pinning 'modelengine'
     # on 26.3 gets you no models, with a warning at startup.
+    # 'vanilla' needs no model plugin and no resource pack. With LibsDisguises it disguises you as a
+    # bat properly. Without it, Karasu spawns a real bat and hides you: cosmetic only, and that bat
+    # can be attacked separately from you. Pinned engines that aren't installed warn at startup.
     model-engine: auto
     # Let morphed players see their own crow model (F5). Their own body is hidden so only the crow shows.
     self-view: true

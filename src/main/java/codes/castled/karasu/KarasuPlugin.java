@@ -13,6 +13,7 @@ import codes.castled.karasu.managers.CrowModelEngine;
 import codes.castled.karasu.managers.ModelEngineBridge;
 import codes.castled.karasu.managers.ModelEngineType;
 import codes.castled.karasu.managers.NoopCrowModelEngine;
+import codes.castled.karasu.managers.VanillaCrowModelEngine;
 import codes.castled.karasu.pack.ResourcePackService;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,7 @@ public class KarasuPlugin extends JavaPlugin {
     private CrowModelEngine crowModelEngine;
     private ModelEngineBridge modelEngineBridge;
     private BetterModelBridge betterModelBridge;
+    private VanillaCrowModelEngine vanillaEngine;
     private ResourcePackService resourcePackService;
     private UnlimitedNametagsHook nametagHook;
     private SelfItemHider selfItemHider;
@@ -114,6 +116,14 @@ public class KarasuPlugin extends JavaPlugin {
             return new NoopCrowModelEngine("disabled in config");
         }
 
+        if (requested == ModelEngineType.VANILLA) {
+            // Bat mode needs no model plugin at all, so it is settled before either bridge is probed.
+            vanillaEngine = new VanillaCrowModelEngine(this);
+            config.setModelEngineType(ModelEngineType.VANILLA);
+            getLogger().info("Model engine: " + vanillaEngine.name() + " (requested vanilla).");
+            return vanillaEngine;
+        }
+
         betterModelBridge = new BetterModelBridge(this, config);
         modelEngineBridge = new ModelEngineBridge(this);
         boolean hasBetterModel = betterModelBridge.isAvailable();
@@ -163,6 +173,11 @@ public class KarasuPlugin extends JavaPlugin {
         if (selfItemHider != null) {
             selfItemHider.unregister();
         }
+        if (vanillaEngine != null) {
+            // A reload into another engine must not strand the previous run's bats.
+            vanillaEngine.shutdown();
+            vanillaEngine = null;
+        }
         getLogger().info("Karasu - Crow Transformation Plugin disabled!");
     }
     
@@ -178,6 +193,11 @@ public class KarasuPlugin extends JavaPlugin {
     /** Null unless ModelEngine was probed at startup; for {@code /crows debug}. */
     public ModelEngineBridge getModelEngineBridge() {
         return modelEngineBridge;
+    }
+
+    /** Null unless bat mode was selected; for {@code /crows debug}. */
+    public VanillaCrowModelEngine getVanillaEngine() {
+        return vanillaEngine;
     }
 
     /** Null unless BetterModel was probed at startup; for {@code /crows debug}. */

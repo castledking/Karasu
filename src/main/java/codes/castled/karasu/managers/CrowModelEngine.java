@@ -58,6 +58,14 @@ public interface CrowModelEngine {
     void setBaseEntityVisible(Entity entity, boolean visible);
 
     /**
+     * Called every tick for a swarm carrier, so engines that need a separate entity can keep it in step
+     * with the invisible carrier the swarm moves along its path. No-op for engines whose model is
+     * attached to the carrier itself.
+     */
+    default void tickModel(Entity carrier) {
+    }
+
+    /**
      * Turns self view off for a model that is being taken off, for the engines that need the teardown to
      * be explicit. ModelEngine's forced pairing outlives the model, so this has to undo it.
      */
